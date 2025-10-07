@@ -34,7 +34,7 @@ public class BaseApiController {
 
     @Autowired
     private ApplicationContext applicationContext;
-    private Logger logger = LogManager.getLogger(this.getClass());
+    private final Logger logger = LogManager.getLogger(this.getClass());
 
     private Method findCorrectMethod(Class<?> beanClass, String serviceName, String method) {
         for(Method m : beanClass.getDeclaredMethods()) {
@@ -78,6 +78,8 @@ public class BaseApiController {
 
     @ExceptionHandler(exception = BaseLogicException.class, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> handleBaseLogicException(BaseLogicException ex) {
+        logger.error("> Logical error occurred.");
+        logger.error(ex.getMessage(), ex.getCause());
         return new ResponseEntity<>(JsonProcessor.toJson(ex), HttpStatusCode.valueOf(ex.getCode()));
     }
 }
