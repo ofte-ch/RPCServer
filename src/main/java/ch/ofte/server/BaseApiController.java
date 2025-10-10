@@ -53,7 +53,9 @@ public class BaseApiController {
             Method m = findCorrectMethod(beanClass, serviceName, method);
 
             Optional<Class<?>> parameterType = Arrays.stream(m.getParameterTypes()).findFirst();
-            if (parameterType.isEmpty()) throw new InvalidServiceException(serviceName);
+            if (parameterType.isEmpty()) { // Service method accept 0 argument
+                return m.invoke(bean);
+            }
 
             String jsonBody = body == null ? "" : body.toString();
 
