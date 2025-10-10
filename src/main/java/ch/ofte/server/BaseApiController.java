@@ -18,6 +18,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -46,13 +47,31 @@ public class BaseApiController {
         throw new InvalidServiceException(serviceName);
     }
 
+    private record InvokeOption(boolean streamingInvoke) {
+        static InvokeOption withStreaming() {
+            return new InvokeOption(true);
+        }
+        static InvokeOption withOutStreaming() {
+            return new InvokeOption(false);
+        }
+    }
+
     private Object invoke(String serviceName, String method, JsonNode body) {
+        return invoke(serviceName, method, body, InvokeOption.withOutStreaming());
+    };
+
+    private Object invoke(String serviceName, String method, JsonNode body, InvokeOption option) {
         try {
             Object bean = applicationContext.getBean(serviceName);
             Class<?> beanClass = bean.getClass();
             if (!beanClass.isAnnotationPresent(Service.class)) throw new NoSuchServiceDefinitionException(serviceName);
 
             Method m = findCorrectMethod(beanClass, serviceName, method);
+
+            if (Flux.class.isAssignableFrom(m.getReturnType()) && (option == null || !option.streamingInvoke)) {
+                throw new InvalidServiceException(serviceName, "This method is required to be called with the \"s\" prefix! " +
+                        "Example usage: /api/s/serviceName/methodName");
+            }
 
             Optional<Class<?>> parameterType = Arrays.stream(m.getParameterTypes()).findFirst();
             if (parameterType.isEmpty()) { // Service method accept 0 argument
@@ -78,6 +97,12 @@ public class BaseApiController {
     @ResponseBody
     public ResponseEntity<String> doRpc(@PathVariable String serviceName, @PathVariable String method, @RequestBody(required = false) JsonNode body) {
         return new ResponseEntity<>(JsonProcessor.toJson(invoke(serviceName, method, body)), HttpStatus.OK);
+    }
+
+    @PostMapping(path = "/s/{serviceName}/{method}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @ResponseBody
+    public ResponseEntity<Flux<?>> doStreamingRpc(@PathVariable String serviceName, @PathVariable String method, @RequestBody(required = false) JsonNode body) {
+        return new ResponseEntity<>((Flux<?>) invoke(serviceName, method, body, InvokeOption.withStreaming()), HttpStatus.OK);
     }
 
     @ExceptionHandler(exception = BaseLogicException.class, produces = MediaType.APPLICATION_JSON_VALUE)
